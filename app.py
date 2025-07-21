@@ -35,13 +35,37 @@ st.sidebar.metric("🕒 Last Retrain", last_retrain)
 st.title("🧠 AutoML Audit Engine")
 st.caption("Monitor, detect, and act upon model drift.")
 
-# --- MODEL CHECK ---
+# --- MODEL CHECK AND LOAD (CRUCIAL PLACEMENT) ---
+# This part ensures the model and metadata are loaded BEFORE they are used.
 if not os.path.exists(MODEL_PATH) or not os.path.exists(METADATA_PATH):
     st.error("❌ Base model not found. Please train it using `baseline_train.py`.")
     st.stop()
 
 model, metadata = load_model_and_metadata(MODEL_PATH, METADATA_PATH)
-baseline_accuracy = metadata.get("baseline_accuracy", 0)
+# Now 'metadata' is loaded and ready to be used!
+
+# --- Baseline Model Performance Section (CORRECTED PLACEMENT) ---
+st.header("📊 Baseline Model Performance")
+if metadata: 
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(label="Accuracy", value=f"{metadata.get('accuracy', 0):.2f}")
+    with col2:
+        st.metric(label="Macro Precision", value=f"{metadata.get('precision_macro', 0):.2f}")
+    with col3:
+        st.metric(label="Macro Recall", value=f"{metadata.get('recall_macro', 0):.2f}")
+    with col4:
+        st.metric(label="Macro F1-Score", value=f"{metadata.get('f1_macro', 0):.2f}")
+    
+    st.markdown("---")
+    st.subheader("Detailed Classification Report (Baseline)")
+    st.json(metadata.get("classification_report", {}))
+    
+else:
+    st.warning("Baseline model performance metrics not available. Please ensure baseline_train.py runs successfully.")
+
+st.markdown("---")
 
 # --- UPLOAD TEST DATA ---
 test_file = st.file_uploader("📁 Upload Test Data CSV")
@@ -55,11 +79,15 @@ if test_file:
     X_test = df.drop("target", axis=1)
     y_test = df["target"]
 
+    # Ensure baseline_accuracy is retrieved from the loaded metadata for consistency
+    baseline_accuracy_for_drift = metadata.get('accuracy', 0) # Use 'accuracy' key now, not 'baseline_accuracy'
+
     y_pred, current_accuracy, drift_detected = predict_and_check_drift(
-        model, X_test, y_test, baseline_accuracy
+        model, X_test, y_test, baseline_accuracy_for_drift # Use the correct key here
     )
 
-    save_history(HISTORY_PATH, baseline_accuracy, current_accuracy, drift_detected)
+    # Make sure save_history also uses the correct baseline accuracy key
+    save_history(HISTORY_PATH, baseline_accuracy_for_drift, current_accuracy, drift_detected)
 
     # --- STATUS BANNER ---
     if drift_detected:
@@ -69,7 +97,8 @@ if test_file:
 
     # --- METRICS ---
     col1, col2, col3 = st.columns(3)
-    col1.metric("📊 Baseline Accuracy", f"{baseline_accuracy:.2f}")
+    # Ensure this also uses the correct key 'accuracy'
+    col1.metric("📊 Baseline Accuracy", f"{baseline_accuracy_for_drift:.2f}") 
     col2.metric("📉 Current Accuracy", f"{current_accuracy:.2f}")
     col3.metric("⚠️ Drift Detected", "Yes" if drift_detected else "No")
 
@@ -81,6 +110,8 @@ if test_file:
 
     # --- DRIFT HISTORY CHART ---
     st.subheader("📈 Drift History")
+    # Make sure history_df loading is updated to use 'accuracy' if your save_history uses it
+    # For now, assuming history_df will eventually be updated too, or continue using baseline_accuracy if it's fine
     st.line_chart(history_df[["baseline_accuracy", "current_accuracy"]])
 
 # --- FOOTER ---
