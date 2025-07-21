@@ -9,7 +9,7 @@ from ml_engine import (
     predict_and_check_drift,
     save_history,
     load_history,
-    send_slack_notification # <--- This import is for the new notification function
+    send_slack_notification
 )
 
 # --- CONFIG ---
@@ -37,20 +37,17 @@ st.title("🧠 AutoML Audit Engine")
 st.caption("Monitor, detect, and act upon model drift.")
 
 # --- MODEL CHECK AND LOAD (This must remain at the top of the main content) ---
-# It loads the model and metadata, which are needed for both baseline display AND prediction.
 if not os.path.exists(MODEL_PATH) or not os.path.exists(METADATA_PATH):
     st.error("❌ Base model not found. Please train it using `baseline_train.py`.")
-    st.stop() # Stop the app if model/metadata are not found
+    st.stop()
 
 model, metadata = load_model_and_metadata(MODEL_PATH, METADATA_PATH)
-# Now 'model' and 'metadata' are loaded and ready to be used by subsequent sections.
 
 # --- UPLOAD TEST DATA SECTION (Moved Higher Up) ---
 st.header("⬆️ Upload New Data for Audit")
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 # --- Baseline Model Performance Section (Moved Below Upload) ---
-# It's good to show this always, as static reference
 st.header("📊 Baseline Model Performance")
 if metadata: 
     col1, col2, col3, col4 = st.columns(4)
@@ -81,9 +78,16 @@ if uploaded_file is not None:
         st.write("Uploaded Data Preview:")
         st.dataframe(new_data.head())
 
+        # --- DEBUGGING LINES FOR UPLOADED DATA ---
+        st.write(f"DEBUG: Shape of new_data (pre-prediction): {new_data.shape}")
+        st.write(f"DEBUG: First 2 rows of new_data (pre-prediction):\n{new_data.head(2)}")
+        print(f"RENDER LOG DEBUG: Shape of new_data before prediction: {new_data.shape}")
+        print(f"RENDER LOG DEBUG: new_data head before prediction:\n{new_data.head()}")
+        # --- END DEBUGGING LINES ---
+
         if 'target' not in new_data.columns:
             st.error("❌ 'target' column missing in uploaded data. Please ensure your CSV has a 'target' column.")
-            st.stop() # Stop if target is missing after upload
+            st.stop()
 
         X_test = new_data.drop("target", axis=1)
         y_test = new_data["target"]
@@ -99,7 +103,6 @@ if uploaded_file is not None:
         # --- STATUS BANNER ---
         if drift_detected:
             st.warning(f"⚠️ Drift Detected! Accuracy dropped to {current_accuracy:.2f}. Retraining recommended.")
-            # --- CALL TO SLACK NOTIFICATION FUNCTION ---
             notification_message = (
                 f"Model drift detected! 📉\n"
                 f"Baseline Accuracy: {metadata.get('accuracy', 0):.2f}\n"
@@ -107,7 +110,6 @@ if uploaded_file is not None:
                 f"Please check the AutoML Audit Engine dashboard for details: https://automl-audit-engine.onrender.com"
             )
             send_slack_notification(notification_message)
-            # --- END OF ADDITION ---
         else:
             st.success(f"✅ Model Healthy. Current Accuracy: {current_accuracy:.2f}.")
 
@@ -121,12 +123,19 @@ if uploaded_file is not None:
         # --- RESULTS ---
         st.subheader("🧾 Prediction Results")
         new_data["Prediction"] = y_pred
-        st.dataframe(new_data)
+
+        # --- DEBUGGING LINES FOR PREDICTION RESULTS ---
+        st.write(f"DEBUG: Shape of new_data (post-prediction): {new_data.shape}")
+        st.write(f"DEBUG: First 2 rows of new_data (post-prediction):\n{new_data.head(2)}")
+        print(f"RENDER LOG DEBUG: Shape of new_data after prediction: {new_data.shape}")
+        print(f"RENDER LOG DEBUG: new_data head after prediction:\n{new_data.head()}")
+        # --- END DEBUGGING LINES ---
+
+        st.dataframe(new_data) # This should now display the full data with predictions
         st.download_button("📥 Download Results", new_data.to_csv(index=False).encode(), "predictions.csv", key="download_pred_btn")
 
         # --- DRIFT HISTORY CHART ---
         st.subheader("📈 Drift History")
-        # Reload history to include the latest entry for the chart
         updated_history_df = load_history(HISTORY_PATH)
         st.line_chart(updated_history_df[["baseline_accuracy", "current_accuracy"]])
 
