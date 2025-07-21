@@ -76,13 +76,12 @@ if uploaded_file is not None:
     try:
         new_data = pd.read_csv(uploaded_file)
         st.write("Uploaded Data Preview:")
-        st.dataframe(new_data.head())
+        # Changed st.dataframe(new_data.head()) to st.table(new_data.head())
+        st.table(new_data.head()) 
 
-        # --- DEBUGGING LINES FOR UPLOADED DATA ---
+        # --- DEBUGGING LINES (keeping st.write for on-page display for now) ---
         st.write(f"DEBUG: Shape of new_data (pre-prediction): {new_data.shape}")
         st.write(f"DEBUG: First 2 rows of new_data (pre-prediction):\n{new_data.head(2)}")
-        print(f"RENDER LOG DEBUG: Shape of new_data before prediction: {new_data.shape}")
-        print(f"RENDER LOG DEBUG: new_data head before prediction:\n{new_data.head()}")
         # --- END DEBUGGING LINES ---
 
         if 'target' not in new_data.columns:
@@ -124,14 +123,13 @@ if uploaded_file is not None:
         st.subheader("🧾 Prediction Results")
         new_data["Prediction"] = y_pred
 
-        # --- DEBUGGING LINES FOR PREDICTION RESULTS ---
+        # --- DEBUGGING LINES (keeping st.write for on-page display for now) ---
         st.write(f"DEBUG: Shape of new_data (post-prediction): {new_data.shape}")
         st.write(f"DEBUG: First 2 rows of new_data (post-prediction):\n{new_data.head(2)}")
-        print(f"RENDER LOG DEBUG: Shape of new_data after prediction: {new_data.shape}")
-        print(f"RENDER LOG DEBUG: new_data head after prediction:\n{new_data.head()}")
         # --- END DEBUGGING LINES ---
 
-        st.dataframe(new_data) # This should now display the full data with predictions
+        # Changed st.dataframe(new_data) to st.table(new_data)
+        st.table(new_data) 
         st.download_button("📥 Download Results", new_data.to_csv(index=False).encode(), "predictions.csv", key="download_pred_btn")
 
         # --- DRIFT HISTORY CHART ---
