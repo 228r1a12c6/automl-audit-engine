@@ -7,7 +7,7 @@ import json
 import os
 import numpy as np
 import requests # <--- NEW: Import for sending notifications
-
+from datetime import datetime # <--- ADD THIS LINE
 def load_model_and_metadata(model_path: str, metadata_path: str):
     """
     Loads the machine learning model and its associated metadata.
