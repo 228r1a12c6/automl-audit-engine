@@ -1,0 +1,6 @@
+date,country,state,confirmed,recovered,deaths
+2020-03-01,India,Maharashtra,1,0,0
+2020-03-02,India,Maharashtra,2,0,0
+2020-03-03,India,Maharashtra,3,1,0
+2020-03-04,India,Maharashtra,4,1,0
+2020-03-05,India,Maharashtra,6,2,0
