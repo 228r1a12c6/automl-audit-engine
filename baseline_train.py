@@ -4,8 +4,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 import joblib
 import json
-import os # Import the os module
-import numpy as np # Import numpy for potential floor division
+import os
+import numpy as np
 
 # Define paths for data and model/metadata
 DATA_PATH = "data/base.csv"
@@ -25,9 +25,6 @@ except FileNotFoundError:
 print("DATA COLUMNS:", df.columns)
 
 # 🔹 Features & Target
-# IMPORTANT: Adjust 'target' column name if your base.csv has a different one.
-# For example, if your target is 'label', change to df.drop("label", axis=1) and y = df["label"]
-# You might need to inspect base.csv to confirm the target column.
 try:
     X = df.drop("target", axis=1)
     y = df["target"]
@@ -37,84 +34,94 @@ except KeyError:
 
 
 # 🔹 Train-test split
-# Ensure 'y' has at least 2 unique classes for classification
 if y.nunique() < 2:
     print("Error: Target variable has less than 2 unique classes. Cannot perform classification.")
     exit()
 
-# --- MODIFICATION START ---
-# Calculate the minimum number of samples needed per class for stratification
 min_samples_per_class = y.value_counts().min()
 num_classes = y.nunique()
 
-# Determine a safe test_size
-# If dataset is very small, we might need to adjust test_size or even remove stratification
-current_test_size = 0.2 # Your original test_size
+current_test_size = 0.2
 adjusted_test_size = current_test_size
 
-# Calculate how many samples from the smallest class would end up in the test set
-# If this is less than 1, we have a problem with stratification.
-# For train_test_split with stratify, each class must have at least 1 sample in both splits.
-# So, the number of samples for the smallest class in the test set must be at least 1.
-# This implies that min_samples_per_class * test_size >= 1
-# And min_samples_per_class * (1 - test_size) >= 1
-
-# A safer approach is to ensure that min_samples_per_class is large enough
-# If min_samples_per_class is too low for the chosen test_size
 if min_samples_per_class < 1 / (1 - current_test_size) or min_samples_per_class < 1 / current_test_size:
     print(f"Warning: Dataset is small ({len(df)} samples, smallest class has {min_samples_per_class} samples).")
-    # Try increasing test_size to be more forgiving for stratification
-    # If 0.2 didn't work, let's try 0.3 or 0.4.
-    if len(df) >= 10 and num_classes < len(df) * 0.4: # Heuristic to avoid making test set too large
-        adjusted_test_size = 0.3 # Try 30% for test set first
+    if len(df) >= 10 and num_classes < len(df) * 0.4:
+        adjusted_test_size = 0.3
         if min_samples_per_class < 1 / (1 - adjusted_test_size) or min_samples_per_class < 1 / adjusted_test_size:
-             adjusted_test_size = 0.4 # Try 40%
+             adjusted_test_size = 0.4
              if min_samples_per_class < 1 / (1 - adjusted_test_size) or min_samples_per_class < 1 / adjusted_test_size:
-                 # If even 0.4 doesn't work, or dataset is truly tiny, consider no stratification or larger test_size
                  print("Cannot guarantee stratification with current dataset size. Increasing test_size to 0.5.")
-                 adjusted_test_size = 0.5 # As a last resort for very small datasets
+                 adjusted_test_size = 0.5
     else:
         print("Dataset too small for stratification, or very few samples in smallest class. Proceeding without stratification.")
-        # If the dataset is truly too small for any reasonable stratification, remove it
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=42)
-        # Skip the stratified split below
-        print("Model trained without stratification due to very small dataset.")
+        # Original training block for extremely small datasets without stratification
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=42) # Fixed test_size here too
         model = RandomForestClassifier(random_state=42)
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
         acc = accuracy_score(y_test, y_pred)
+        # Use output_dict=True to get a dictionary of metrics
+        report = classification_report(y_test, y_pred, output_dict=True, zero_division=0) # zero_division=0 to handle warnings
+
+        # Extract relevant metrics
+        metrics_to_save = {
+            "accuracy": acc,
+            "precision_macro": report['macro avg']['precision'],
+            "recall_macro": report['macro avg']['recall'],
+            "f1_macro": report['macro avg']['f1-score'],
+            "precision_weighted": report['weighted avg']['precision'],
+            "recall_weighted": report['weighted avg']['recall'],
+            "f1_weighted": report['weighted avg']['f1-score'],
+            "classification_report": report # Save the full report for completeness
+        }
+
         joblib.dump(model, MODEL_PATH)
         with open(METADATA_PATH, "w") as f:
-            json.dump({"accuracy": acc}, f)
+            json.dump(metrics_to_save, f, indent=4) # indent for readability
+
         print(f"\nBaseline model trained with accuracy: {acc:.2f}\n")
         print("Classification Report:\n")
-        print(classification_report(y_test, y_pred))
+        print(classification_report(y_test, y_pred, zero_division=0)) # print full report
         print(f"✅ Model saved to: {MODEL_PATH}")
         print(f"✅ Metadata saved to: {METADATA_PATH}")
-        exit() # Exit after non-stratified training for very small dataset
-
+        exit() # Exit after non-stratified training
 
 print(f"Using test_size={adjusted_test_size} for train_test_split.")
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=adjusted_test_size, random_state=42, stratify=y)
-# --- MODIFICATION END ---
+
 
 # 🔹 Model Training
-model = RandomForestClassifier(random_state=42) # Added random_state for reproducibility
+model = RandomForestClassifier(random_state=42)
 model.fit(X_train, y_train)
 
 # 🔹 Evaluation
 y_pred = model.predict(X_test)
 acc = accuracy_score(y_test, y_pred)
+# Use output_dict=True to get a dictionary of metrics
+report = classification_report(y_test, y_pred, output_dict=True, zero_division=0) # zero_division=0 to handle warnings
+
+# Extract relevant metrics for saving
+metrics_to_save = {
+    "accuracy": acc,
+    "precision_macro": report['macro avg']['precision'],
+    "recall_macro": report['macro avg']['recall'],
+    "f1_macro": report['macro avg']['f1-score'],
+    "precision_weighted": report['weighted avg']['precision'],
+    "recall_weighted": report['weighted avg']['recall'],
+    "f1_weighted": report['weighted avg']['f1-score'],
+    "classification_report": report # Save the full report for completeness
+}
 
 print(f"\nBaseline model trained with accuracy: {acc:.2f}\n")
 print("Classification Report:\n")
-print(classification_report(y_test, y_pred))
+print(classification_report(y_test, y_pred, zero_division=0)) # print full report
 
 # 🔹 Save model and metadata
 joblib.dump(model, MODEL_PATH)
 
 with open(METADATA_PATH, "w") as f:
-    json.dump({"accuracy": acc}, f)
+    json.dump(metrics_to_save, f, indent=4) # indent=4 for pretty printing JSON
 
 print(f"✅ Model saved to: {MODEL_PATH}")
 print(f"✅ Metadata saved to: {METADATA_PATH}")
