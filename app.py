@@ -31,20 +31,25 @@ last_retrain = history_df["timestamp"].iloc[-1] if not history_df.empty else "N/
 st.sidebar.metric("⚠️ Total Drifts Detected", int(total_drifts))
 st.sidebar.metric("🕒 Last Retrain", last_retrain)
 
-# --- HEADER ---
+# --- MAIN HEADER ---
 st.title("🧠 AutoML Audit Engine")
 st.caption("Monitor, detect, and act upon model drift.")
 
-# --- MODEL CHECK AND LOAD (CRUCIAL PLACEMENT) ---
-# This part ensures the model and metadata are loaded BEFORE they are used.
+# --- MODEL CHECK AND LOAD (This must remain at the top of the main content) ---
+# It loads the model and metadata, which are needed for both baseline display AND prediction.
 if not os.path.exists(MODEL_PATH) or not os.path.exists(METADATA_PATH):
     st.error("❌ Base model not found. Please train it using `baseline_train.py`.")
-    st.stop()
+    st.stop() # Stop the app if model/metadata are not found
 
 model, metadata = load_model_and_metadata(MODEL_PATH, METADATA_PATH)
-# Now 'metadata' is loaded and ready to be used!
+# Now 'model' and 'metadata' are loaded and ready to be used by subsequent sections.
 
-# --- Baseline Model Performance Section (CORRECTED PLACEMENT) ---
+# --- UPLOAD TEST DATA SECTION (Moved Higher Up) ---
+st.header("⬆️ Upload New Data for Audit")
+uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+
+# --- Baseline Model Performance Section (Moved Below Upload) ---
+# It's good to show this always, as static reference
 st.header("📊 Baseline Model Performance")
 if metadata: 
     col1, col2, col3, col4 = st.columns(4)
@@ -67,52 +72,58 @@ else:
 
 st.markdown("---")
 
-# --- UPLOAD TEST DATA ---
-test_file = st.file_uploader("📁 Upload Test Data CSV")
 
-if test_file:
-    df = pd.read_csv(test_file)
-    if 'target' not in df.columns:
-        st.error("❌ 'target' column missing in uploaded data.")
-        st.stop()
+# --- DYNAMIC CONTENT BASED ON UPLOADED FILE (Remains conditional) ---
+if uploaded_file is not None:
+    try:
+        new_data = pd.read_csv(uploaded_file)
+        st.write("Uploaded Data Preview:")
+        st.dataframe(new_data.head())
 
-    X_test = df.drop("target", axis=1)
-    y_test = df["target"]
+        if 'target' not in new_data.columns:
+            st.error("❌ 'target' column missing in uploaded data. Please ensure your CSV has a 'target' column.")
+            st.stop() # Stop if target is missing after upload
 
-    # Ensure baseline_accuracy is retrieved from the loaded metadata for consistency
-    baseline_accuracy_for_drift = metadata.get('accuracy', 0) # Use 'accuracy' key now, not 'baseline_accuracy'
+        X_test = new_data.drop("target", axis=1)
+        y_test = new_data["target"]
 
-    y_pred, current_accuracy, drift_detected = predict_and_check_drift(
-        model, X_test, y_test, baseline_accuracy_for_drift # Use the correct key here
-    )
+        baseline_accuracy_for_drift = metadata.get('accuracy', 0)
 
-    # Make sure save_history also uses the correct baseline accuracy key
-    save_history(HISTORY_PATH, baseline_accuracy_for_drift, current_accuracy, drift_detected)
+        y_pred, current_accuracy, drift_detected = predict_and_check_drift(
+            model, X_test, y_test, baseline_accuracy_for_drift
+        )
 
-    # --- STATUS BANNER ---
-    if drift_detected:
-        st.warning(f"⚠️ Drift Detected! Accuracy dropped to {current_accuracy:.2f}. Retraining recommended.")
-    else:
-        st.success(f"✅ Model Healthy. Current Accuracy: {current_accuracy:.2f}.")
+        save_history(HISTORY_PATH, baseline_accuracy_for_drift, current_accuracy, drift_detected)
 
-    # --- METRICS ---
-    col1, col2, col3 = st.columns(3)
-    # Ensure this also uses the correct key 'accuracy'
-    col1.metric("📊 Baseline Accuracy", f"{baseline_accuracy_for_drift:.2f}") 
-    col2.metric("📉 Current Accuracy", f"{current_accuracy:.2f}")
-    col3.metric("⚠️ Drift Detected", "Yes" if drift_detected else "No")
+        # --- STATUS BANNER ---
+        if drift_detected:
+            st.warning(f"⚠️ Drift Detected! Accuracy dropped to {current_accuracy:.2f}. Retraining recommended.")
+        else:
+            st.success(f"✅ Model Healthy. Current Accuracy: {current_accuracy:.2f}.")
 
-    # --- RESULTS ---
-    st.subheader("🧾 Prediction Results")
-    df["Prediction"] = y_pred
-    st.dataframe(df)
-    st.download_button("📥 Download Results", df.to_csv(index=False).encode(), "predictions.csv")
+        # --- CURRENT METRICS ---
+        st.subheader("Current Model Performance")
+        col1_curr, col2_curr = st.columns(2)
+        col1_curr.metric("📉 Current Accuracy", f"{current_accuracy:.2f}")
+        col2_curr.metric("⚠️ Drift Detected", "Yes" if drift_detected else "No")
 
-    # --- DRIFT HISTORY CHART ---
-    st.subheader("📈 Drift History")
-    # Make sure history_df loading is updated to use 'accuracy' if your save_history uses it
-    # For now, assuming history_df will eventually be updated too, or continue using baseline_accuracy if it's fine
-    st.line_chart(history_df[["baseline_accuracy", "current_accuracy"]])
+
+        # --- RESULTS ---
+        st.subheader("🧾 Prediction Results")
+        new_data["Prediction"] = y_pred
+        st.dataframe(new_data)
+        st.download_button("📥 Download Results", new_data.to_csv(index=False).encode(), "predictions.csv", key="download_pred_btn")
+
+        # --- DRIFT HISTORY CHART ---
+        st.subheader("📈 Drift History")
+        # Reload history to include the latest entry for the chart
+        updated_history_df = load_history(HISTORY_PATH)
+        st.line_chart(updated_history_df[["baseline_accuracy", "current_accuracy"]])
+
+    except pd.errors.EmptyDataError:
+        st.error("The uploaded CSV file is empty. Please upload a file with data.")
+    except Exception as e:
+        st.error(f"An error occurred while processing the uploaded file: {e}")
 
 # --- FOOTER ---
 st.markdown("---")
