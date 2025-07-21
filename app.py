@@ -8,7 +8,8 @@ from ml_engine import (
     load_model_and_metadata,
     predict_and_check_drift,
     save_history,
-    load_history
+    load_history,
+    send_slack_notification # <--- This import is for the new notification function
 )
 
 # --- CONFIG ---
@@ -98,6 +99,15 @@ if uploaded_file is not None:
         # --- STATUS BANNER ---
         if drift_detected:
             st.warning(f"⚠️ Drift Detected! Accuracy dropped to {current_accuracy:.2f}. Retraining recommended.")
+            # --- CALL TO SLACK NOTIFICATION FUNCTION ---
+            notification_message = (
+                f"Model drift detected! 📉\n"
+                f"Baseline Accuracy: {metadata.get('accuracy', 0):.2f}\n"
+                f"Current Accuracy: {current_accuracy:.2f}\n"
+                f"Please check the AutoML Audit Engine dashboard for details: https://automl-audit-engine.onrender.com"
+            )
+            send_slack_notification(notification_message)
+            # --- END OF ADDITION ---
         else:
             st.success(f"✅ Model Healthy. Current Accuracy: {current_accuracy:.2f}.")
 
